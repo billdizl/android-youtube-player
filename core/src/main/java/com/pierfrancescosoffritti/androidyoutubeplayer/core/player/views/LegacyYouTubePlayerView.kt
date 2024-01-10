@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.annotation.LayoutRes
 import androidx.lifecycle.*
+import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.CorePlayerConstant
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.PlayerConstants
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.YouTubePlayer
 import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.listeners.AbstractYouTubePlayerListener
@@ -21,79 +22,87 @@ import com.pierfrancescosoffritti.androidyoutubeplayer.core.player.utils.Playbac
  * most of its actions to this one.
  */
 internal class LegacyYouTubePlayerView(
-  context: Context,
-  listener: FullscreenListener,
-  attrs: AttributeSet? = null,
-  defStyleAttr: Int = 0
+    context: Context,
+    listener: FullscreenListener,
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = 0
 ) : SixteenByNineFrameLayout(context, attrs, defStyleAttr) {
 
-  constructor(context: Context) : this(context, FakeWebViewYouTubeListener, null, 0)
+    constructor(context: Context) : this(context, FakeWebViewYouTubeListener, null, 0)
 
-  internal var webViewYouTubePlayer: WebViewYouTubePlayer? = null
+    internal var webViewYouTubePlayer: WebViewYouTubePlayer? = null
 
-  private val networkObserver = NetworkObserver(context.applicationContext)
-  private val playbackResumer = PlaybackResumer()
+    private val networkObserver = NetworkObserver(context.applicationContext)
+    private val playbackResumer = PlaybackResumer()
 
-  internal var isYouTubePlayerReady = false
-  private var initialize = { }
-  private val youTubePlayerCallbacks = mutableSetOf<YouTubePlayerCallback>()
+    internal var isYouTubePlayerReady = false
+    private var initialize = { }
+    private val youTubePlayerCallbacks = mutableSetOf<YouTubePlayerCallback>()
 
-  internal var canPlay = true
-    private set
+    internal var canPlay = true
+        private set
 
-  init {
-      //webViewYouTubePlayer may Exception
-     webViewYouTubePlayer = try {
-          WebViewYouTubePlayer(context, listener)
-      } catch (e: Exception) {
-          null
-      }
-      webViewYouTubePlayer?.let {
-          addView(
-              it,
-              LayoutParams(
-                  ViewGroup.LayoutParams.MATCH_PARENT,
-                  ViewGroup.LayoutParams.MATCH_PARENT
-              )
-          )
-      }
-    webViewYouTubePlayer?.addListener(playbackResumer)
-
-    // stop playing if the user loads a video but then leaves the app before the video starts playing.
-    webViewYouTubePlayer?.addListener(object : AbstractYouTubePlayerListener() {
-      override fun onStateChange(youTubePlayer: YouTubePlayer, state: PlayerConstants.PlayerState) {
-        if (state == PlayerConstants.PlayerState.PLAYING && !isEligibleForPlayback()) {
-          youTubePlayer.pause()
-        }
-      }
-    })
-
-    webViewYouTubePlayer?.addListener(object : AbstractYouTubePlayerListener() {
-      override fun onReady(youTubePlayer: YouTubePlayer) {
-        isYouTubePlayerReady = true
-
-        youTubePlayerCallbacks.forEach { it.onYouTubePlayer(youTubePlayer) }
-        youTubePlayerCallbacks.clear()
-
-        youTubePlayer.removeListener(this)
-      }
-    })
-
-    networkObserver.listeners.add(object : NetworkObserver.Listener {
-      override fun onNetworkAvailable() {
-        if (!isYouTubePlayerReady) {
-          initialize()
-        }
-        else {
-            webViewYouTubePlayer?.let {
-                playbackResumer.resume(it.youtubePlayer)
+    init {
+        //webViewYouTubePlayer may Exception
+        if ((!CorePlayerConstant.isWebviewHaveException)||CorePlayerConstant.isWebviewHaveExceptionLoadToTry) {
+            webViewYouTubePlayer = try {
+                WebViewYouTubePlayer(context, listener)
+            } catch (e: Exception) {
+                null
             }
+        } else {
+            webViewYouTubePlayer = null
         }
-      }
+        CorePlayerConstant.isWebviewHaveException = webViewYouTubePlayer == null
 
-      override fun onNetworkUnavailable() { }
-    })
-  }
+        webViewYouTubePlayer?.let {
+            addView(
+                it,
+                LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
+        }
+        webViewYouTubePlayer?.addListener(playbackResumer)
+
+        // stop playing if the user loads a video but then leaves the app before the video starts playing.
+        webViewYouTubePlayer?.addListener(object : AbstractYouTubePlayerListener() {
+            override fun onStateChange(
+                youTubePlayer: YouTubePlayer,
+                state: PlayerConstants.PlayerState
+            ) {
+                if (state == PlayerConstants.PlayerState.PLAYING && !isEligibleForPlayback()) {
+                    youTubePlayer.pause()
+                }
+            }
+        })
+
+        webViewYouTubePlayer?.addListener(object : AbstractYouTubePlayerListener() {
+            override fun onReady(youTubePlayer: YouTubePlayer) {
+                isYouTubePlayerReady = true
+
+                youTubePlayerCallbacks.forEach { it.onYouTubePlayer(youTubePlayer) }
+                youTubePlayerCallbacks.clear()
+
+                youTubePlayer.removeListener(this)
+            }
+        })
+
+        networkObserver.listeners.add(object : NetworkObserver.Listener {
+            override fun onNetworkAvailable() {
+                if (!isYouTubePlayerReady) {
+                    initialize()
+                } else {
+                    webViewYouTubePlayer?.let {
+                        playbackResumer.resume(it.youtubePlayer)
+                    }
+                }
+            }
+
+            override fun onNetworkUnavailable() {}
+        })
+    }
 
   /**
    * Initialize the player. You must call this method before using the player.
